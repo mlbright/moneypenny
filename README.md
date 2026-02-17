@@ -29,6 +29,7 @@ Prerequisites: Go 1.21+ and a Linux system with systemd.
 ```bash
 git clone <repo-url> && cd auto-shutdown
 sudo ./install.sh
+# sudo -E env PATH=$PATH ./install.sh # if running from a Go environment where $GOPATH/bin is not in root's PATH
 ```
 
 `install.sh` will:
