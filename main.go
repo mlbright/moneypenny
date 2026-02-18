@@ -15,11 +15,11 @@ import (
 const configPath = "/etc/auto-shutdown.conf"
 
 type config struct {
-	AfterHour    int
-	AfterMinute  int
-	IdleMinutes  int
+	AfterHour     int
+	AfterMinute   int
+	IdleMinutes   int
 	CheckInterval time.Duration
-	DryRun       bool
+	DryRun        bool
 }
 
 // ── configuration ───────────────────────────────────────────────────
@@ -163,6 +163,54 @@ func getIdleSeconds() int {
 	return min
 }
 
+// ── logged-in user activity guard ────────────────────────────────────
+
+// hasLoggedInUserActivity returns true if any user is logged in and shows
+// signs of activity.  This acts as a hard veto: we NEVER shut down while
+// a user is actively present, regardless of what idle-time heuristics say.
+func hasLoggedInUserActivity() bool {
+	// 1. Fast check: are any users logged in at all?
+	whoOut, whoErr := exec.Command("who").Output()
+	whoLines := strings.TrimSpace(string(whoOut))
+	if whoErr != nil || whoLines == "" {
+		return false // no logged-in users detected
+	}
+
+	// 2. Users are logged in.  Ask loginctl whether any session is active
+	//    (IdleHint=no).  If loginctl is unavailable, err on the side of
+	//    caution and assume the user is active.
+	sessOut, sessErr := exec.Command("loginctl", "list-sessions", "--no-legend").Output()
+	if sessErr != nil {
+		log.Println("loginctl unavailable but users are logged in; assuming active")
+		return true
+	}
+
+	for _, line := range strings.Split(strings.TrimSpace(string(sessOut)), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 0 {
+			continue
+		}
+		sessionID := fields[0]
+
+		props, err := exec.Command(
+			"loginctl", "show-session", sessionID,
+			"--property=IdleHint",
+		).Output()
+		if err != nil {
+			continue
+		}
+
+		for _, pl := range strings.Split(strings.TrimSpace(string(props)), "\n") {
+			k, v, ok := strings.Cut(pl, "=")
+			if ok && k == "IdleHint" && v == "no" {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
 // ── time gate ───────────────────────────────────────────────────────
 
 func isPastShutdownTime(afterHour, afterMinute int) bool {
@@ -199,6 +247,12 @@ func main() {
 
 	for {
 		if !isPastShutdownTime(cfg.AfterHour, cfg.AfterMinute) {
+			time.Sleep(cfg.CheckInterval)
+			continue
+		}
+
+		if hasLoggedInUserActivity() {
+			log.Println("Active user session detected; shutdown vetoed")
 			time.Sleep(cfg.CheckInterval)
 			continue
 		}
