@@ -40,6 +40,30 @@ sudo ./install.sh
 4. Install the systemd unit to `/etc/systemd/system/auto-shutdown.service`.
 5. Enable and start the service.
 
+### Using the Makefile
+
+The project includes a `Makefile` with all common tasks. Run `make help` to see available targets.
+
+```bash
+# Build the binary
+make
+
+# Build, install binary + config + systemd service (requires sudo)
+sudo make install
+
+# Format and vet the source code
+make lint
+
+# Run tests
+make test
+
+# Stop the service and remove the binary + unit file (requires sudo)
+sudo make uninstall
+
+# Remove build artifacts
+make clean
+```
+
 ### Manual build & install
 
 ```bash
